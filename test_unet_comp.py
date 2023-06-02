@@ -17,12 +17,12 @@ def build_args():
     # basic args
     path_config = Path("Dataset/fastmri_dirs.yaml")
     num_gpus = 1
-    batch_size = 12
+    batch_size = 1
     
     data_path = fetch_dir("knee_path", path_config)
     default_root_dir = fetch_dir("log_path", path_config) / "unet_comp"
     
-    parser.add_argument("--mode", default="train", type=str, choices=["train", "test"])
+    parser.add_argument("--mode", default="test", type=str, choices=["train", "test"])
     parser.add_argument("--mask_type", default="random", type=str, choices=["random", "equispaced"])
     parser.add_argument("--center_fractions", default=[0.08], type=list)
     parser.add_argument("--accelerations", default=[4], type=list)
@@ -36,13 +36,14 @@ def build_args():
         batch_size=batch_size,
         default_root_dir=default_root_dir,
         max_epochs=100,
-        test_path=None,
+        test_path=data_path / "singlecoil_val",
+        noise_lvl=0.0,
         in_chans=2,
         out_chans=2,
     )
     
     args = parser.parse_args()
-    
+    print('noise_lvl', args.noise_lvl)
     # checkpoints
     checkpoint_dir = args.default_root_dir / "checkpoints"
     if not checkpoint_dir.exists():

@@ -168,7 +168,7 @@ class FastMriDataModule(pl.LightningDataModule):
                 _ = SliceDataset(
                     root=data_path,
                     transform=data_transform,
-                    sample_rate=sample_rate,
+                    sample_rate=0.01,
                     volume_sample_rate=volume_sample_rate,
                     challenge=self.challenge,
                     use_dataset_cache=self.use_dataset_cache,

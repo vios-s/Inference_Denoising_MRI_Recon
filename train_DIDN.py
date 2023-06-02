@@ -78,8 +78,8 @@ def main():
     
     # data transforms
     train_transform = DCDIDNDataTransform(args.challenge, mask_func=mask, use_seed=False)
-    val_transform = DCDIDNDataTransform(args.challenge, mask_func=mask, use_seed=False)
-    test_transform = DCDIDNDataTransform(args.challenge)
+    val_transform = DCDIDNDataTransform(args.challenge, mask_func=mask, use_seed=True)
+    test_transform = DCDIDNDataTransform(args.challenge, mask_func=mask, use_seed=True, noise_lvl=args.noise_lvl)
     
     # pl data module
     data_module = FastMriDataModule(

@@ -7,7 +7,7 @@ import pytorch_lightning as pl
 from pl_modules import FastMriDataModule, UnetModule
 from data.mri_data import fetch_dir
 from data.masking import create_mask_for_mask_type
-from data.transforms import DCDIDNDataTransform
+from data.transforms import UnetDataTransform
 
 torch.set_float32_matmul_precision('medium')
 
@@ -17,12 +17,12 @@ def build_args():
     # basic args
     path_config = Path("Dataset/fastmri_dirs.yaml")
     num_gpus = 1
-    batch_size = 12
+    batch_size = 1
     
     data_path = fetch_dir("knee_path", path_config)
-    default_root_dir = fetch_dir("log_path", path_config) / "unet_comp"
+    default_root_dir = fetch_dir("log_path", path_config) / "unet"
     
-    parser.add_argument("--mode", default="train", type=str, choices=["train", "test"])
+    parser.add_argument("--mode", default="test", type=str, choices=["train", "test"])
     parser.add_argument("--mask_type", default="random", type=str, choices=["random", "equispaced"])
     parser.add_argument("--center_fractions", default=[0.08], type=list)
     parser.add_argument("--accelerations", default=[4], type=list)
@@ -36,9 +36,9 @@ def build_args():
         batch_size=batch_size,
         default_root_dir=default_root_dir,
         max_epochs=100,
-        test_path=None,
-        in_chans=2,
-        out_chans=2,
+        test_path=data_path / "singlecoil_val",
+        noise_lvl=1e-3,
+        lambda_=0.1,
     )
     
     args = parser.parse_args()
@@ -77,9 +77,9 @@ def main():
     # masking
     mask = create_mask_for_mask_type(args.mask_type, args.center_fractions, args.accelerations)
     # data transform
-    train_transform = DCDIDNDataTransform(args.challenge, mask_func=mask, use_seed=False)
-    val_transform = DCDIDNDataTransform(args.challenge, mask_func=mask, use_seed=True)
-    test_transform = DCDIDNDataTransform(args.challenge, mask_func=mask, use_seed=True, noise_lvl=args.noise_lvl)
+    train_transform = UnetDataTransform(args.challenge, mask_func=mask, use_seed=False)
+    val_transform = UnetDataTransform(args.challenge, mask_func=mask, use_seed=True)
+    test_transform = UnetDataTransform(args.challenge, mask_func=mask, use_seed=True, noise_lvl=args.noise_lvl)
     
     # pl data module
     data_module = FastMriDataModule(

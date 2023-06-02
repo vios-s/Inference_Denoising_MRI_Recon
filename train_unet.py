@@ -77,7 +77,7 @@ def main():
     # data transform
     train_transform = UnetDataTransform(args.challenge, mask_func=mask, use_seed=False)
     val_transform = UnetDataTransform(args.challenge, mask_func=mask, use_seed=True)
-    test_transform = UnetDataTransform(args.challenge)
+    test_transform = UnetDataTransform(args.challenge, mask_func=mask, use_seed=True, noise_lvl=args.noise_lvl)
     
     # pl data module
     data_module = FastMriDataModule(

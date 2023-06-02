@@ -66,51 +66,7 @@ class UnetDataTransform:
             std: the standard deviations used for normalization, 
             fname: the filename, 
             slice_num: and the slice number.
-        """
-        # # !1 convert to tensor
-        # kspace_torch = to_tensor(kspace)
-        # max_value = attrs["max"] if "max" in attrs else 0.0
-        
-        # # !2 apply mask
-        # if self.mask_func:
-        #     seed = None if not self.use_seed else tuple(map(ord, fname))
-        #     masked_kspace = apply_mask(kspace_torch, self.mask_func, seed=seed)[0]
-        # else:
-        #     masked_kspace = kspace_torch
-            
-        # # !3 apply ifft2 to get zero filled solution
-        # image = ifft2c(masked_kspace)
-        
-        # # !4 crop input image to correct size
-        # if target is not None:
-        #     crop_size = (target.shape[-2], target.shape[-1])
-        # else:
-        #     crop_size = (attrs["recon_size"][0], attrs["recon_size"][1])
-            
-        # # ?check for FLAIR 203
-        # if image.shape[-2] < crop_size[1]:
-        #     crop_size = (image.shape[-2], image.shape[-2])
-            
-        # image = complex_center_crop(image, crop_size)
-        
-        # # !5 absolute value
-        # image = complex_abs(image)
-        
-        # if self.challenge == 'multicoil':
-        #     image = rss(image)
-            
-        # # !6 normalize input image
-        # image, mean, std = normalize_instance(image, eps=1e-11)
-        # image = image.clamp(-6, 6)
-        
-        # # !7 normalize target
-        # if target is not None:
-        #     target_torch = center_crop(to_tensor(target), crop_size)
-        #     target_torch = normalize(target_torch, mean, std, eps=1e-11)
-        #     target_torch = target_torch.clamp(-6, 6)
-        # else:
-        #     target_torch = torch.tensor([0])
-        
+        """        
         # !1 convert to tensor
         tensor_kspace = to_tensor(kspace)
         max_value = attrs["max"] if "max" in attrs else 0.0

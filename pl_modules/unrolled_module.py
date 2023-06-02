@@ -250,14 +250,61 @@ class UnrolledModule(MriModule):
         post_output = self._post_process(output, batch.mean, batch.std)
         post_target = self._post_process(batch.target, batch.mean, batch.std)
 
-        return {
-            "batch_idx": batch_idx,
-            "image": post_image,
+        test_logs = {
+            "image": post_image.cpu().numpy(),
             "fname": batch.fname,
-            "slice": batch.slice_num,
+            "slice_num": batch.slice_num,
             "max_value": batch.max_value,
-            "output": post_output,
+            "output": post_output.cpu().numpy(),
+            "target": post_target.cpu().numpy()
         }
+        
+        for k in ("fname", "slice_num", "output", "target", "max_value"):
+            assert k in test_logs, f"Missing {k} in val_logs"
+        
+        if test_logs["output"].ndim == 2:
+            test_logs["output"] = test_logs["output"].unsqueeze(0)
+
+        elif test_logs["output"].ndim != 3:
+            raise RuntimeError("Unexpected output size from validation_step.")
+
+        if test_logs["target"].ndim == 2:
+            test_logs["target"] = test_logs["target"].unsqueeze(0)
+        elif test_logs["target"].ndim != 3:
+            raise RuntimeError("Unexpected target size from validation_step.")
+        
+        # compute evaluation metrics
+        mse_vals = defaultdict(dict)
+        target_norms = defaultdict(dict)
+        ssim_vals = defaultdict(dict)
+        max_vals = dict()
+        for i, fname in enumerate(test_logs["fname"]):
+
+            slice_num = int(test_logs["slice_num"][i].cpu())
+            maxval = test_logs["max_value"][i].cpu().numpy()
+            target = test_logs["target"][i]
+            output = test_logs["output"][i]
+            
+            mse_vals[fname][slice_num] = torch.tensor(evaluate.mse(target, output)).view(1)
+            target_norms[fname][slice_num] = torch.tensor(evaluate.mse(target, np.zeros_like(target))).view(1)
+            ssim_vals[fname][slice_num] = torch.tensor(evaluate.ssim(target[None, ...], output[None, ...], maxval=maxval)).view(1)
+            max_vals[fname] = maxval
+
+        pred = {
+            "mse_vals": dict(mse_vals),
+            "target_norms": dict(target_norms),
+            "ssim_vals": dict(ssim_vals),
+            "max_vals": max_vals
+
+        }
+        test_logs.update(pred)
+        
+        self.test_step_outputs.append(test_logs)
+        
+        return test_logs
+        
+        
+        
             
     def configure_optimizers(self):
         optim = torch.optim.Adam(
