@@ -14,6 +14,7 @@ pip install -r requirements.txt
 
 ### Supported Reconstruction Models
 
+0. Zero Filling
 1. Compressed Sensing
 2. UNet
 3. Convolutional Recurrent Neural Network (CRNN)
@@ -35,3 +36,6 @@ pip install -r requirements.txt
 ## Acknowledgements
 
 ## References
+
+1. Zbontar, Jure, et al. "fastMRI: An open dataset and benchmarks for accelerated MRI." arXiv preprint arXiv:1811.08839 (2018).
+2. 

@@ -1,16 +1,82 @@
-import torch
-import numpy as np
+"""
+Copyright (c) Facebook, Inc. and its affiliates.
+
+This source code is licensed under the MIT license found in the
+LICENSE file in the root directory of this source tree.
+"""
 
 from typing import List, Optional
+
+import torch
+import torch.fft
+
+
+def fft2c_new(data: torch.Tensor, norm: str = "ortho") -> torch.Tensor:
+    """
+    Apply centered 2 dimensional Fast Fourier Transform.
+
+    Args:
+        data: Complex valued input data containing at least 3 dimensions:
+            dimensions -3 & -2 are spatial dimensions and dimension -1 has size
+            2. All other dimensions are assumed to be batch dimensions.
+        norm: Normalization mode. See ``torch.fft.fft``.
+
+    Returns:
+        The FFT of the input.
+    """
+    if not data.shape[-1] == 2:
+        raise ValueError("Tensor does not have separate complex dim.")
+
+    data = ifftshift(data, dim=[-3, -2])
+    data = torch.view_as_real(
+        torch.fft.fftn(  # type: ignore
+            torch.view_as_complex(data), dim=(-2, -1), norm=norm
+        )
+    )
+    data = fftshift(data, dim=[-3, -2])
+
+    return data
+
+
+def ifft2c_new(data: torch.Tensor, norm: str = "ortho") -> torch.Tensor:
+    """
+    Apply centered 2-dimensional Inverse Fast Fourier Transform.
+
+    Args:
+        data: Complex valued input data containing at least 3 dimensions:
+            dimensions -3 & -2 are spatial dimensions and dimension -1 has size
+            2. All other dimensions are assumed to be batch dimensions.
+        norm: Normalization mode. See ``torch.fft.ifft``.
+
+    Returns:
+        The IFFT of the input.
+    """
+    if not data.shape[-1] == 2:
+        raise ValueError("Tensor does not have separate complex dim.")
+
+    data = ifftshift(data, dim=[-3, -2])
+    data = torch.view_as_real(
+        torch.fft.ifftn(  # type: ignore
+            torch.view_as_complex(data), dim=(-2, -1), norm=norm
+        )
+    )
+    data = fftshift(data, dim=[-3, -2])
+
+    return data
+
+
+# Helper functions
 
 
 def roll_one_dim(x: torch.Tensor, shift: int, dim: int) -> torch.Tensor:
     """
     Similar to roll but for only one dim.
+
     Args:
         x: A PyTorch tensor.
         shift: Amount to roll.
         dim: Which dimension to roll.
+
     Returns:
         Rolled version of x.
     """
@@ -31,10 +97,12 @@ def roll(
 ) -> torch.Tensor:
     """
     Similar to np.roll but applies to PyTorch Tensors.
+
     Args:
         x: A PyTorch tensor.
         shift: Amount to roll.
         dim: Which dimension to roll.
+
     Returns:
         Rolled version of x.
     """
@@ -50,9 +118,11 @@ def roll(
 def fftshift(x: torch.Tensor, dim: Optional[List[int]] = None) -> torch.Tensor:
     """
     Similar to np.fft.fftshift but applies to PyTorch Tensors
+
     Args:
         x: A PyTorch tensor.
         dim: Which dimension to fftshift.
+
     Returns:
         fftshifted version of x.
     """
@@ -73,9 +143,11 @@ def fftshift(x: torch.Tensor, dim: Optional[List[int]] = None) -> torch.Tensor:
 def ifftshift(x: torch.Tensor, dim: Optional[List[int]] = None) -> torch.Tensor:
     """
     Similar to np.fft.ifftshift but applies to PyTorch Tensors
+
     Args:
         x: A PyTorch tensor.
         dim: Which dimension to ifftshift.
+
     Returns:
         ifftshifted version of x.
     """
@@ -91,40 +163,3 @@ def ifftshift(x: torch.Tensor, dim: Optional[List[int]] = None) -> torch.Tensor:
         shift[i] = (x.shape[dim_num] + 1) // 2
 
     return roll(x, shift, dim)
-
-
-def fft2c(data, norm="ortho"):
-    """
-    Apply centered 2 dimensional FFT for complex valued data (2 channels real-valued).
-
-    Args:
-        data (_type_): _description_
-        norm (str, optional): _description_. Defaults to "ortho".
-    """
-    assert data.shape[-1] == 2, "The last dimension should have a size of 2 corresponding to the real and imaginary parts"
-    
-    data = ifftshift(data, dim=[-3, -2])
-    data = torch.view_as_real(
-            torch.fft.fftn(
-                torch.view_as_complex(data), dim=(-2, -1), norm=norm)
-    )
-    data = fftshift(data, dim=[-3, -2])
-    
-    return data
-
-
-def ifft2c(data, norm="ortho"):
-    
-    assert data.shape[-1] == 2, "The last dimension should have a size of 2 corresponding to the real and imaginary parts"
-    data = ifftshift(data, dim=[-3, -2])
-    data = torch.view_as_real(
-            torch.fft.ifftn(
-                torch.view_as_complex(data), dim=(-2, -1), norm=norm
-        )
-    )
-    data = fftshift(data, dim=[-3, -2])
-    
-    return data
-    
-    
-    
