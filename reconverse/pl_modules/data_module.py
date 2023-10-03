@@ -9,13 +9,13 @@ from argparse import ArgumentParser
 from pathlib import Path
 from typing import Callable, Optional, Union
 
-import pytorch_lightning as pl
+from lightning.pytorch import LightningDataModule
 import torch
 
 import sys
-sys.path.append('../')
+sys.path.append('../../')
 
-from data.fastmri import CombinedSliceDataset, SliceDataset, VolumeSampler
+from reconverse.data.fastmri import CombinedSliceDataset, SliceDataset, VolumeSampler
 
 
 def worker_init_fn(worker_id):
@@ -71,7 +71,7 @@ def _check_both_not_none(val1, val2):
     return False
 
 
-class FastMriDataModule(pl.LightningDataModule):
+class FastMriDataModule(LightningDataModule):
     """
     Data module class for fastMRI data sets.
 

@@ -10,14 +10,14 @@ from argparse import ArgumentParser
 from collections import defaultdict
 
 import numpy as np
-import pytorch_lightning as pl
+from lightning.pytorch import LightningModule
 import torch
 from torchmetrics.metric import Metric
 
 import sys
-sys.path.append('../')
-from utils import evaluate
-from utils.io import save_reconstructions
+sys.path.append('../../')
+from reconverse.utils import evaluate
+from reconverse.utils.io import save_reconstructions
 
 
 class DistributedMetricSum(Metric):
@@ -33,7 +33,7 @@ class DistributedMetricSum(Metric):
         return self.quantity
 
 
-class MriModule(pl.LightningModule):
+class MriModule(LightningModule):
     """
     Abstract super class for deep larning reconstruction models.
 
@@ -53,7 +53,7 @@ class MriModule(pl.LightningModule):
     Other methods from LightningModule can be overridden as needed.
     """
 
-    def __init__(self, num_log_images: int = 16):
+    def __init__(self, num_log_images: int = 16, recon_dir: str = "reconstruction"):
         """
         Args:
             num_log_images: Number of images to log. Defaults to 16.
@@ -61,99 +61,26 @@ class MriModule(pl.LightningModule):
         super().__init__()
 
         self.num_log_images = num_log_images
+        self.recon_dir = recon_dir
         self.val_log_indices = None
+        self.train_log_indices = [0]
+        self.train_step_outputs = []
+        self.validation_step_outputs = []
+        self.test_step_outputs = []
 
         self.NMSE = DistributedMetricSum()
         self.SSIM = DistributedMetricSum()
         self.PSNR = DistributedMetricSum()
+        self.TrainLoss = DistributedMetricSum()
         self.ValLoss = DistributedMetricSum()
+        self.TestLoss = DistributedMetricSum()
         self.TotExamples = DistributedMetricSum()
         self.TotSliceExamples = DistributedMetricSum()
-
-    def validation_step_end(self, val_logs):
-        # check inputs
-        for k in (
-            "batch_idx",
-            "fname",
-            "slice_num",
-            "max_value",
-            "output",
-            "target",
-            "val_loss",
-        ):
-            if k not in val_logs.keys():
-                raise RuntimeError(
-                    f"Expected key {k} in dict returned by validation_step."
-                )
-        if val_logs["output"].ndim == 2:
-            val_logs["output"] = val_logs["output"].unsqueeze(0)
-        elif val_logs["output"].ndim != 3:
-            raise RuntimeError("Unexpected output size from validation_step.")
-        if val_logs["target"].ndim == 2:
-            val_logs["target"] = val_logs["target"].unsqueeze(0)
-        elif val_logs["target"].ndim != 3:
-            raise RuntimeError("Unexpected output size from validation_step.")
-
-        # pick a set of images to log if we don't have one already
-        if self.val_log_indices is None:
-            self.val_log_indices = list(
-                np.random.permutation(len(self.trainer.val_dataloaders[0]))[
-                    : self.num_log_images
-                ]
-            )
-
-        # log images to tensorboard
-        if isinstance(val_logs["batch_idx"], int):
-            batch_indices = [val_logs["batch_idx"]]
-        else:
-            batch_indices = val_logs["batch_idx"]
-        for i, batch_idx in enumerate(batch_indices):
-            if batch_idx in self.val_log_indices:
-                key = f"val_images_idx_{batch_idx}"
-                target = val_logs["target"][i].unsqueeze(0)
-                output = val_logs["output"][i].unsqueeze(0)
-                error = torch.abs(target - output)
-                output = output / output.max()
-                target = target / target.max()
-                error = error / error.max()
-                self.log_image(f"{key}/target", target)
-                self.log_image(f"{key}/reconstruction", output)
-                self.log_image(f"{key}/error", error)
-
-        # compute evaluation metrics
-        mse_vals = defaultdict(dict)
-        target_norms = defaultdict(dict)
-        ssim_vals = defaultdict(dict)
-        max_vals = dict()
-        for i, fname in enumerate(val_logs["fname"]):
-            slice_num = int(val_logs["slice_num"][i].cpu())
-            maxval = val_logs["max_value"][i].cpu().numpy()
-            output = val_logs["output"][i].cpu().numpy()
-            target = val_logs["target"][i].cpu().numpy()
-
-            mse_vals[fname][slice_num] = torch.tensor(
-                evaluate.mse(target, output)
-            ).view(1)
-            target_norms[fname][slice_num] = torch.tensor(
-                evaluate.mse(target, np.zeros_like(target))
-            ).view(1)
-            ssim_vals[fname][slice_num] = torch.tensor(
-                evaluate.ssim(target[None, ...], output[None, ...], maxval=maxval)
-            ).view(1)
-            max_vals[fname] = maxval
-
-        return {
-            "val_loss": val_logs["val_loss"],
-            "mse_vals": dict(mse_vals),
-            "target_norms": dict(target_norms),
-            "ssim_vals": dict(ssim_vals),
-            "max_vals": max_vals,
-        }
 
     def log_image(self, name, image):
         self.logger.experiment.add_image(name, image, global_step=self.global_step)
 
-    def validation_epoch_end(self, val_logs):
+    def on_validation_epoch_end(self):
         # aggregate losses
         losses = []
         mse_vals = defaultdict(dict)
@@ -162,7 +89,7 @@ class MriModule(pl.LightningModule):
         max_vals = dict()
 
         # use dict updates to handle duplicate slices
-        for val_log in val_logs:
+        for val_log in self.validation_step_outputs:
             losses.append(val_log["val_loss"].view(-1))
 
             for k in val_log["mse_vals"].keys():
@@ -221,12 +148,15 @@ class MriModule(pl.LightningModule):
         self.log("validation_loss", val_loss / tot_slice_examples, prog_bar=True)
         for metric, value in metrics.items():
             self.log(f"val_metrics/{metric}", value / tot_examples)
+            
+        self.validation_step_outputs.clear()
 
-    def test_epoch_end(self, test_logs):
+
+    def on_test_epoch_end(self):
         outputs = defaultdict(dict)
 
         # use dicts for aggregation to handle duplicate slices in ddp mode
-        for log in test_logs:
+        for log in self.test_step_outputs:
             for i, (fname, slice_num) in enumerate(zip(log["fname"], log["slice"])):
                 outputs[fname][int(slice_num.cpu())] = log["output"][i]
 
@@ -244,6 +174,8 @@ class MriModule(pl.LightningModule):
         self.print(f"Saving reconstructions to {save_path}")
 
         save_reconstructions(outputs, save_path)
+        self.test_step_outputs.clear()
+
 
     @staticmethod
     def add_model_specific_args(parent_parser):  # pragma: no-cover
@@ -253,11 +185,8 @@ class MriModule(pl.LightningModule):
         parser = ArgumentParser(parents=[parent_parser], add_help=False)
 
         # logging params
-        parser.add_argument(
-            "--num_log_images",
-            default=16,
-            type=int,
-            help="Number of images to log to Tensorboard",
-        )
+        parser.add_argument("--num_log_images", default=16, type=int, help="Number of images to log to Tensorboard")
+        parser.add_argument("--recon_dir", default="reconstruction", type=str)
+
 
         return parser

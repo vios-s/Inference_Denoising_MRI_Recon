@@ -6,15 +6,17 @@ LICENSE file in the root directory of this source tree.
 """
 
 from argparse import ArgumentParser
+from collections import defaultdict
 
+import numpy as np
 import torch
 from torch.nn import functional as F
 
 import sys
-sys.path.append('../')
+sys.path.append('../../')
 
-from models import Unet
-
+from reconverse.models import Unet
+from reconverse.utils import evaluate
 from .mri_module import MriModule
 
 
@@ -97,7 +99,7 @@ class UnetModule(MriModule):
         mean = batch.mean.unsqueeze(1).unsqueeze(2)
         std = batch.std.unsqueeze(1).unsqueeze(2)
 
-        return {
+        val_logs= {
             "batch_idx": batch_idx,
             "fname": batch.fname,
             "slice_num": batch.slice_num,
@@ -106,17 +108,140 @@ class UnetModule(MriModule):
             "target": batch.target * std + mean,
             "val_loss": F.l1_loss(output, batch.target),
         }
+        
+        for k in (
+            "batch_idx",
+            "fname",
+            "slice_num",
+            "max_value",
+            "output",
+            "target",
+            "val_loss",
+        ):
+            if k not in val_logs.keys():
+                raise RuntimeError(
+                    f"Expected key {k} in dict returned by validation_step."
+                )
+        if val_logs["output"].ndim == 2:
+            val_logs["output"] = val_logs["output"].unsqueeze(0)
+        elif val_logs["output"].ndim != 3:
+            raise RuntimeError("Unexpected output size from validation_step.")
+        if val_logs["target"].ndim == 2:
+            val_logs["target"] = val_logs["target"].unsqueeze(0)
+        elif val_logs["target"].ndim != 3:
+            raise RuntimeError("Unexpected output size from validation_step.")
+
+        # pick a set of images to log if we don't have one already
+        if self.val_log_indices is None:
+            self.val_log_indices = list(np.random.permutation(
+                len(self.trainer.val_dataloaders))[: self.num_log_images])
+
+        # log images to tensorboard
+        if isinstance(val_logs["batch_idx"], int):
+            batch_indices = [val_logs["batch_idx"]]
+        else:
+            batch_indices = val_logs["batch_idx"]
+        for i, batch_idx in enumerate(batch_indices):
+            if batch_idx in self.val_log_indices:
+                key = f"val_images_idx_{batch_idx}"
+                target = val_logs["target"][i].unsqueeze(0)
+                output = val_logs["output"][i].unsqueeze(0)
+                error = torch.abs(target - output)
+                output = output / output.max()
+                target = target / target.max()
+                error = error / error.max()
+                self.log_image(f"{key}/target", target)
+                self.log_image(f"{key}/reconstruction", output)
+                self.log_image(f"{key}/error", error)
+
+        # compute evaluation metrics
+        mse_vals = defaultdict(dict)
+        target_norms = defaultdict(dict)
+        ssim_vals = defaultdict(dict)
+        max_vals = dict()
+        for i, fname in enumerate(val_logs["fname"]):
+            slice_num = int(val_logs["slice_num"][i].cpu())
+            maxval = val_logs["max_value"][i].cpu().numpy()
+            output = val_logs["output"][i].cpu().numpy()
+            target = val_logs["target"][i].cpu().numpy()
+
+            mse_vals[fname][slice_num] = torch.tensor(
+                evaluate.mse(target, output)
+            ).view(1)
+            target_norms[fname][slice_num] = torch.tensor(
+                evaluate.mse(target, np.zeros_like(target))
+            ).view(1)
+            ssim_vals[fname][slice_num] = torch.tensor(
+                evaluate.ssim(target[None, ...], output[None, ...], maxval=maxval)
+            ).view(1)
+            max_vals[fname] = maxval
+
+        pred = {
+            "val_loss": val_logs["val_loss"],
+            "mse_vals": dict(mse_vals),
+            "target_norms": dict(target_norms),
+            "ssim_vals": dict(ssim_vals),
+            "max_vals": max_vals,
+        }
+        self.validation_step_outputs.append(pred)
+        
+        return pred
 
     def test_step(self, batch, batch_idx):
         output = self.forward(batch.image)
         mean = batch.mean.unsqueeze(1).unsqueeze(2)
         std = batch.std.unsqueeze(1).unsqueeze(2)
 
-        return {
+        test_logs = {
             "fname": batch.fname,
             "slice": batch.slice_num,
             "output": (output * std + mean).cpu().numpy(),
         }
+        
+        for k in ("batch_idx", "image", "kspace", "output", "target", "mask", "fname", "slice_num", "max_value"):
+            if k not in test_logs.keys():
+                raise ValueError(f"Key {k} not found in test_logs")
+
+        if test_logs["output"].ndim == 2:
+            test_logs["output"] = test_logs["output"].unsqueeze(0)
+        elif test_logs["output"].ndim != 3:
+            raise RuntimeError("Unexpected output size from validation_step.")
+        if test_logs["target"].ndim == 2:
+            test_logs["target"] = test_logs["target"].unsqueeze(0)
+        elif test_logs["target"].ndim != 3:
+            raise RuntimeError("Unexpected output size from validation_step.")
+
+        # compute evaluation metrics
+        mse_vals = defaultdict(dict)
+        target_norms = defaultdict(dict)
+        ssim_vals = defaultdict(dict)
+        max_vals = dict()
+
+        for i, fname in enumerate(test_logs["fname"]):
+            slice_num = int(test_logs["slice_num"][i].cpu())
+            maxval = test_logs["max_value"][i].cpu().numpy()
+            output = test_logs["output"][i].cpu().numpy()
+            target = test_logs["target"][i].cpu().numpy()
+
+            mse_vals[fname][slice_num] = torch.tensor(
+                evaluate.mse(target, output)).view(1)
+            target_norms[fname][slice_num] = torch.tensor(
+                evaluate.mse(target, np.zeros_like(target))).view(1)
+            ssim_vals[fname][slice_num] = torch.tensor(
+                evaluate.ssim(target, output, maxval=maxval)).view(1)
+            max_vals[fname] = maxval
+
+        pred = {
+            "mse_vals": dict(mse_vals),
+            "target_norms": dict(target_norms),
+            "ssim_vals": dict(ssim_vals),
+            "max_vals": max_vals
+        }
+        test_logs.update(pred)
+
+        self.test_step_outputs.append(test_logs)
+
+        return test_logs
 
     def configure_optimizers(self):
         optim = torch.optim.RMSprop(

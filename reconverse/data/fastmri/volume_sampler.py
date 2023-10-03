@@ -11,7 +11,7 @@ import torch
 import torch.distributed as dist
 from torch.utils.data import Sampler
 
-from fastmri.data.mri_data import CombinedSliceDataset, SliceDataset
+from .fastmri_data import CombinedSliceDataset, SliceDataset
 
 
 class VolumeSampler(Sampler):

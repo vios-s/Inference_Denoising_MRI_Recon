@@ -13,11 +13,13 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 import sys
-sys.path.append('..')
-from data.fastmri import fastmri_transforms
-from utils.math import rss_complex, complex_abs, complex_conj, complex_mul
-from utils.fftc import ifft2c, fft2c
-from utils.coil_combine import rss
+sys.path.append('../../')
+
+from reconverse.data.fastmri import fastmri_transforms
+from reconverse.utils.math import complex_abs, complex_conj, complex_mul
+from reconverse.utils.coil_combine import rss_complex
+from reconverse.utils.fftc import ifft2c_new as ifft2c, fft2c_new as fft2c
+from reconverse.utils.coil_combine import rss
 
 from .unet import Unet
 

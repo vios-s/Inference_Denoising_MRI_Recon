@@ -13,11 +13,11 @@ import torch
 from .subsample import MaskFunc
 
 import sys
-sys.path.append('../')
+sys.path.append('../../../')
 
-from utils.math import complex_abs
-from utils.coil_combine import rss, rss_complex
-from utils.fftc import fft2c_new as fft2c, ifft2c_new as ifft2c
+from reconverse.utils.math import complex_abs
+from reconverse.utils.coil_combine import rss, rss_complex
+from reconverse.utils.fftc import fft2c_new as fft2c, ifft2c_new as ifft2c
 
 
 def to_tensor(data: np.ndarray) -> torch.Tensor:

@@ -167,3 +167,8 @@ cython_debug/
 
 .vscode/
 .git/
+logs/
+
+scripts/
+
+*.pkl

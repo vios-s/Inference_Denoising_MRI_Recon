@@ -9,13 +9,13 @@ from argparse import ArgumentParser
 
 import torch
 import sys
-sys.path.append('../')
+sys.path.append('../../')
 
-from data.fastmri import fastmri_transforms
-from models import VarNet
+from reconverse.data.fastmri import fastmri_transforms
+from reconverse.models import VarNet
 
 from .mri_module import MriModule
-from utils.evalute import SSIMLoss
+from reconverse.utils.losses import SSIMLoss
 
 
 class VarNetModule(MriModule):

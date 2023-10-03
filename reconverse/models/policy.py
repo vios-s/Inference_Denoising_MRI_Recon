@@ -15,10 +15,10 @@ import torch.nn.functional as F
 from torch.autograd import Function
 
 import sys
-sys.path.append('../')
+sys.path.append('../../')
 
-from utils.math import complex_conj, complex_mul
-from utils.fftc import ifft2c_new as ifft2c
+from reconverse.utils.math import complex_conj, complex_mul
+from reconverse.utils.fftc import ifft2c_new as ifft2c
 
 
 class LOUPEPolicy(nn.Module):

@@ -12,15 +12,13 @@ import torch
 import torch.nn as nn
 
 import sys
-sys.path.append('..')
+sys.path.append('../../')
 
+from reconverse.utils.math import complex_abs, complex_conj, complex_mul
+from reconverse.utils.coil_combine import rss, rss_complex
+from reconverse.utils.fftc import fft2c_new as fft2c, ifft2c_new as ifft2c
 
-
-from utils.math import complex_abs, complex_conj, complex_mul
-from utils.coil_combine import rss, rss_complex
-from utils.fftc import fft2c_new as fft2c, ifft2c_new as ifft2c
-
-from data.fastmri import fastmri_transforms
+from reconverse.data.fastmri import fastmri_transforms
 
 from .policy import LOUPEPolicy, StraightThroughPolicy
 from .varnet import NormUnet

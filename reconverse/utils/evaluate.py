@@ -16,9 +16,9 @@ from runstats import Statistics
 from skimage.metrics import peak_signal_noise_ratio, structural_similarity
 
 import sys
-sys.path.append('..')
+sys.path.append('../../')
 
-from data.fastmri import fastmri_transforms
+from reconverse.data.fastmri import fastmri_transforms
 
 
 def mse(gt: np.ndarray, pred: np.ndarray) -> np.ndarray:
