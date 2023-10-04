@@ -98,7 +98,7 @@ class MriModule(LightningModule):
                 target_norms[k].update(val_log["target_norms"][k])
             for k in val_log["ssim_vals"].keys():
                 ssim_vals[k].update(val_log["ssim_vals"][k])
-            for k in val_log["max_vals"]:
+            for k in val_log["max_vals"].keys():
                 max_vals[k] = val_log["max_vals"][k]
 
         # check to make sure we have all files in all metrics
@@ -121,19 +121,9 @@ class MriModule(LightningModule):
                 torch.cat([v.view(-1) for _, v in target_norms[fname].items()])
             )
             metrics["nmse"] = metrics["nmse"] + mse_val / target_norm
-            metrics["psnr"] = (
-                metrics["psnr"]
-                + 20
-                * torch.log10(
-                    torch.tensor(
-                        max_vals[fname], dtype=mse_val.dtype, device=mse_val.device
-                    )
-                )
-                - 10 * torch.log10(mse_val)
-            )
-            metrics["ssim"] = metrics["ssim"] + torch.mean(
-                torch.cat([v.view(-1) for _, v in ssim_vals[fname].items()])
-            )
+            metrics["psnr"] = metrics["psnr"] + 20 * torch.log10(torch.tensor(max_vals[fname], dtype=mse_val.dtype, device=mse_val.device)) - 10 * torch.log10(mse_val)
+            metrics["ssim"] = metrics["ssim"] + torch.mean(torch.cat([v.view(-1) for _, v in ssim_vals[fname].items()]))
+
 
         # reduce across ddp via sum
         metrics["nmse"] = self.NMSE(metrics["nmse"])

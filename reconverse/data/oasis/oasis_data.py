@@ -55,7 +55,8 @@ class OasisSliceDataset(torch.utils.data.Dataset):
     def read_raw_data(self, data_path, patient_id, dataslice):
         image_path = glob(os.path.join(data_path, patient_id, 'PROCESSED', 'MPRAGE', 'T88_111', '*t88_gfc.img'))
         image_data = nib.load(image_path[0]).get_fdata()
-        raw_image = image_data.squeeze(-1)
+        raw_image = np.transpose(image_data.squeeze(-1), (2, 0, 1))
+        # rotate 90 degrees clockwise
         raw_slices = raw_image[dataslice]
         
         return raw_slices

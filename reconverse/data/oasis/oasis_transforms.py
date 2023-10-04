@@ -57,7 +57,7 @@ class OasisDataTransform:
             slice_num: and the slice number.
         
         """
-        max_value = 255.0
+        max_value = torch.max(target)
         # ! 1 apply mask
         if mask is None and self.mask_func:
             seed = None if not self.use_seed else tuple(map(ord, fname))
