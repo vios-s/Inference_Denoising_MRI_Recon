@@ -17,6 +17,7 @@ sys.path.append('../../')
 
 from reconverse.models import Unet
 from reconverse.utils import evaluate
+
 from .mri_module import MriModule
 
 
@@ -84,48 +85,49 @@ class UnetModule(MriModule):
         )
 
     def forward(self, image):
-        return self.unet(image.unsqueeze(1)).squeeze(1)
+        if image.ndim == 3:
+            return self.unet(image.unsqueeze(1)).squeeze(1)
+        else:
+            return self.unet(image.permute(0, 3, 1, 2)).permute(0, 2, 3, 1)
 
     def training_step(self, batch, batch_idx):
         output = self(batch.image)
         loss = F.l1_loss(output, batch.target)
 
-        self.log("loss", loss.detach())
+        self.log("train_loss", loss.detach())
 
         return loss
 
     def validation_step(self, batch, batch_idx):
         output = self(batch.image)
-        mean = batch.mean.unsqueeze(1).unsqueeze(2)
-        std = batch.std.unsqueeze(1).unsqueeze(2)
-
+        if output.ndim == 4:
+            mean = batch.mean.unsqueeze(1).unsqueeze(2).unsqueeze(3)
+            std = batch.std.unsqueeze(1).unsqueeze(2).unsqueeze(3)
+        elif output.ndim == 3:
+            mean = batch.mean.unsqueeze(1).unsqueeze(2)
+            std = batch.std.unsqueeze(1).unsqueeze(2)
+            
         val_logs= {
             "batch_idx": batch_idx,
             "fname": batch.fname,
             "slice_num": batch.slice_num,
             "max_value": batch.max_value,
+            "image": batch.image * std + mean,
             "output": output * std + mean,
             "target": batch.target * std + mean,
             "val_loss": F.l1_loss(output, batch.target),
+            "metadata": batch.metadata if hasattr(batch, "metadata") else None,
         }
         
-        for k in (
-            "batch_idx",
-            "fname",
-            "slice_num",
-            "max_value",
-            "output",
-            "target",
-            "val_loss",
-        ):
+        for k in ("batch_idx", "fname", "slice_num", "max_value", "output", "target", "val_loss"):
             if k not in val_logs.keys():
-                raise RuntimeError(
-                    f"Expected key {k} in dict returned by validation_step."
-                )
+                raise RuntimeError(f"Expected key {k} in dict returned by validation_step.")
+        
         if val_logs["output"].ndim == 2:
             val_logs["output"] = val_logs["output"].unsqueeze(0)
         elif val_logs["output"].ndim != 3:
             raise RuntimeError("Unexpected output size from validation_step.")
+        
         if val_logs["target"].ndim == 2:
             val_logs["target"] = val_logs["target"].unsqueeze(0)
         elif val_logs["target"].ndim != 3:
@@ -144,12 +146,15 @@ class UnetModule(MriModule):
         for i, batch_idx in enumerate(batch_indices):
             if batch_idx in self.val_log_indices:
                 key = f"val_images_idx_{batch_idx}"
+                image = val_logs["image"][i].unsqueeze(0)
                 target = val_logs["target"][i].unsqueeze(0)
                 output = val_logs["output"][i].unsqueeze(0)
                 error = torch.abs(target - output)
+                image = image / image.max()
                 output = output / output.max()
                 target = target / target.max()
                 error = error / error.max()
+                self.log_image(f"{key}/image", image)
                 self.log_image(f"{key}/target", target)
                 self.log_image(f"{key}/reconstruction", output)
                 self.log_image(f"{key}/error", error)
@@ -165,15 +170,9 @@ class UnetModule(MriModule):
             output = val_logs["output"][i].cpu().numpy()
             target = val_logs["target"][i].cpu().numpy()
 
-            mse_vals[fname][slice_num] = torch.tensor(
-                evaluate.mse(target, output)
-            ).view(1)
-            target_norms[fname][slice_num] = torch.tensor(
-                evaluate.mse(target, np.zeros_like(target))
-            ).view(1)
-            ssim_vals[fname][slice_num] = torch.tensor(
-                evaluate.ssim(target[None, ...], output[None, ...], maxval=maxval)
-            ).view(1)
+            mse_vals[fname][slice_num] = torch.tensor(evaluate.mse(target, output)).view(1)
+            target_norms[fname][slice_num] = torch.tensor(evaluate.mse(target, np.zeros_like(target))).view(1)
+            ssim_vals[fname][slice_num] = torch.tensor(evaluate.ssim(target[None, ...], output[None, ...], maxval=maxval)).view(1)
             max_vals[fname] = maxval
 
         pred = {
@@ -189,13 +188,21 @@ class UnetModule(MriModule):
 
     def test_step(self, batch, batch_idx):
         output = self.forward(batch.image)
-        mean = batch.mean.unsqueeze(1).unsqueeze(2)
-        std = batch.std.unsqueeze(1).unsqueeze(2)
+        if output.ndim == 4:
+            mean = batch.mean.unsqueeze(1).unsqueeze(2).unsqueeze(3)
+            std = batch.std.unsqueeze(1).unsqueeze(2).unsqueeze(3)
+        elif output.ndim == 3:
+            mean = batch.mean.unsqueeze(1).unsqueeze(2)
+            std = batch.std.unsqueeze(1).unsqueeze(2)
 
         test_logs = {
             "fname": batch.fname,
-            "slice": batch.slice_num,
-            "output": (output * std + mean).cpu().numpy(),
+            "slice_num": batch.slice_num,
+            "max_value": batch.max_value,
+            "image": batch.image * std + mean,
+            "output": output * std + mean,
+            "target": batch.target * std + mean,            
+            "metadata": batch.metadata if hasattr(batch, "metadata") else None,
         }
         
         for k in ("batch_idx", "image", "kspace", "output", "target", "mask", "fname", "slice_num", "max_value"):
@@ -211,6 +218,33 @@ class UnetModule(MriModule):
         elif test_logs["target"].ndim != 3:
             raise RuntimeError("Unexpected output size from validation_step.")
 
+        # * pick an image to log
+        if self.test_log_indices is None:
+            self.test_log_indices = list(np.random.permutation(len(self.trainer.test_dataloaders))[: self.num_log_images])
+
+            # * log the image to tensorboard
+        if isinstance(test_logs["batch_idx"], int):
+            batch_indices = [test_logs["batch_idx"]]
+        else:
+            batch_indices = test_logs["batch_idx"]
+
+        for i, batch_idx in enumerate(batch_indices):
+            if batch_idx in self.test_log_indices:
+                key = f"test_image_{batch_idx}"
+                image = test_logs["image"][i].unsqueeze(0)
+                target = test_logs["target"][i].unsqueeze(0)
+                output = test_logs["output"][i].unsqueeze(0)
+                error = torch.abs(target - output)
+                image = image / image.max()
+                output = output / output.max()
+                target = target / target.max()
+                error = error / error.max()
+
+                self.log_image(f"{key}/image", image)
+                self.log_image(f"{key}/target", target)
+                self.log_image(f"{key}/recon", output)
+                self.log_image(f"{key}/error", error)
+                
         # compute evaluation metrics
         mse_vals = defaultdict(dict)
         target_norms = defaultdict(dict)
@@ -223,12 +257,9 @@ class UnetModule(MriModule):
             output = test_logs["output"][i].cpu().numpy()
             target = test_logs["target"][i].cpu().numpy()
 
-            mse_vals[fname][slice_num] = torch.tensor(
-                evaluate.mse(target, output)).view(1)
-            target_norms[fname][slice_num] = torch.tensor(
-                evaluate.mse(target, np.zeros_like(target))).view(1)
-            ssim_vals[fname][slice_num] = torch.tensor(
-                evaluate.ssim(target, output, maxval=maxval)).view(1)
+            mse_vals[fname][slice_num] = torch.tensor(evaluate.mse(target, output)).view(1)
+            target_norms[fname][slice_num] = torch.tensor(evaluate.mse(target, np.zeros_like(target))).view(1)
+            ssim_vals[fname][slice_num] = torch.tensor(evaluate.ssim(target, output, maxval=maxval)).view(1)
             max_vals[fname] = maxval
 
         pred = {
@@ -238,6 +269,16 @@ class UnetModule(MriModule):
             "max_vals": max_vals
         }
         test_logs.update(pred)
+        
+        nmse = mse_vals[batch.fname[0]][batch.slice_num.item()].item()/target_norms[batch.fname[0]][batch.slice_num.item()].item()
+        psnr = 20 * math.log10(255) - 10 * math.log10(mse_vals[batch.fname[0]][batch.slice_num.item()].item())
+        ssim = ssim_vals[batch.fname[0]][batch.slice_num.item()].item()
+
+        csv_file = f'ub_test_result.csv'
+        with open(csv_file, 'a', newline='') as file:
+            writer = csv.writer(file)
+            writer.writerow([batch.fname[0], batch.slice_num.item(), ssim, psnr, nmse])
+
 
         self.test_step_outputs.append(test_logs)
 
@@ -264,43 +305,16 @@ class UnetModule(MriModule):
         parser = MriModule.add_model_specific_args(parser)
 
         # network params
-        parser.add_argument(
-            "--in_chans", default=1, type=int, help="Number of U-Net input channels"
-        )
-        parser.add_argument(
-            "--out_chans", default=1, type=int, help="Number of U-Net output chanenls"
-        )
-        parser.add_argument(
-            "--chans", default=1, type=int, help="Number of top-level U-Net filters."
-        )
-        parser.add_argument(
-            "--num_pool_layers",
-            default=4,
-            type=int,
-            help="Number of U-Net pooling layers.",
-        )
-        parser.add_argument(
-            "--drop_prob", default=0.0, type=float, help="U-Net dropout probability"
-        )
+        parser.add_argument("--in_chans", default=1, type=int, help="Number of U-Net input channels")
+        parser.add_argument("--out_chans", default=1, type=int, help="Number of U-Net output chanenls")
+        parser.add_argument("--chans", default=1, type=int, help="Number of top-level U-Net filters.")
+        parser.add_argument("--num_pool_layers",default=4,type=int, help="Number of U-Net pooling layers.")
+        parser.add_argument("--drop_prob", default=0.0, type=float, help="U-Net dropout probability")
 
         # training params (opt)
-        parser.add_argument(
-            "--lr", default=0.001, type=float, help="RMSProp learning rate"
-        )
-        parser.add_argument(
-            "--lr_step_size",
-            default=40,
-            type=int,
-            help="Epoch at which to decrease step size",
-        )
-        parser.add_argument(
-            "--lr_gamma", default=0.1, type=float, help="Amount to decrease step size"
-        )
-        parser.add_argument(
-            "--weight_decay",
-            default=0.0,
-            type=float,
-            help="Strength of weight decay regularization",
-        )
+        parser.add_argument("--lr", default=0.001, type=float, help="RMSProp learning rate")
+        parser.add_argument("--lr_step_size",default=40,type=int,help="Epoch at which to decrease step size")
+        parser.add_argument("--lr_gamma", default=0.1, type=float, help="Amount to decrease step size")
+        parser.add_argument("--weight_decay",default=0.0,type=float,help="Strength of weight decay regularization")
 
         return parser

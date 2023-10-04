@@ -9,7 +9,6 @@ import logging
 import os
 import pickle
 import random
-import xml.etree.ElementTree as etree
 from copy import deepcopy
 from pathlib import Path
 from typing import (
@@ -34,82 +33,7 @@ import yaml
 from tqdm import tqdm
 
 
-def et_query(
-    root: etree.Element,
-    qlist: Sequence[str],
-    namespace: str = "http://www.ismrm.org/ISMRMRD",
-) -> str:
-    """
-    ElementTree query function.
 
-    This can be used to query an xml document via ElementTree. It uses qlist
-    for nested queries.
-
-    Args:
-        root: Root of the xml to search through.
-        qlist: A list of strings for nested searches, e.g. ["Encoding",
-            "matrixSize"]
-        namespace: Optional; xml namespace to prepend query.
-
-    Returns:
-        The retrieved data as a string.
-    """
-    s = "."
-    prefix = "ismrmrd_namespace"
-
-    ns = {prefix: namespace}
-
-    for el in qlist:
-        s = s + f"//{prefix}:{el}"
-
-    value = root.find(s, ns)
-    if value is None:
-        raise RuntimeError("Element not found")
-
-    return str(value.text)
-
-
-def fetch_dir(
-    key: str, data_config_file: Union[str, Path, os.PathLike] = "fastmri_dirs.yaml"
-) -> Path:
-    """
-    Data directory fetcher.
-
-    This is a brute-force simple way to configure data directories for a
-    project. Simply overwrite the variables for `knee_path` and `brain_path`
-    and this function will retrieve the requested subsplit of the data for use.
-
-    Args:
-        key: key to retrieve path from data_config_file. Expected to be in
-            ("knee_path", "brain_path", "log_path").
-        data_config_file: Optional; Default path config file to fetch path
-            from.
-
-    Returns:
-        The path to the specified directory.
-    """
-    data_config_file = Path(data_config_file)
-    if not data_config_file.is_file():
-        default_config = {
-            "knee_path": "/path/to/knee",
-            "brain_path": "/path/to/brain",
-            "log_path": ".",
-        }
-        with open(data_config_file, "w") as f:
-            yaml.dump(default_config, f)
-
-        data_dir = default_config[key]
-
-        warn(
-            f"Path config at {data_config_file.resolve()} does not exist. "
-            "A template has been created for you. "
-            "Please enter the directory paths for your system to have defaults."
-        )
-    else:
-        with open(data_config_file, "r") as f:
-            data_dir = yaml.safe_load(f)[key]
-
-    return Path(data_dir)
 
 
 class FastMRIRawDataSample(NamedTuple):
