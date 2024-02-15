@@ -4,7 +4,7 @@
 
 [![preprint](https://img.shields.io/static/v1?label=arXiv&message=2402.08692&color=B31B1B)](https://arxiv.org/abs/2402.08692)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Venue:ISBI 2024](https://img.shields.io/badge/Venue-ISBI%202024-007CFF)]((https://biomedicalimaging.org/2024/))
+[![Venue:ISBI 2024](https://img.shields.io/badge/Venue-ISBI%202024-007CFF)](https://biomedicalimaging.org/2024/)
 
 </div>
 <table align="center">
@@ -94,7 +94,6 @@ If you find this repository or the ideas presented in our paper useful, please c
   title={Inference Stage Denoising for Undersampled MRI Reconstruction},
   author={Yuyang, Xue., Chen, Qin and Sotirios A. Tsaftaris},
   journal={ISBI},
-  journal={arXiv preprint arXiv:2402.08692},
   year={2024}
 }
 ```
