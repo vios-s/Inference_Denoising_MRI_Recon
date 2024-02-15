@@ -2,7 +2,7 @@
 
 # Inference Stage Denoising for Undersampled MRI Reconstruction
 
-[![preprint](https://img.shields.io/static/v1?label=arXiv&message=1234.56789&color=B31B1B)](https://arxiv.org/abs/)
+[![preprint](https://img.shields.io/static/v1?label=arXiv&message=2402.08692&color=B31B1B)](https://arxiv.org/abs/2402.08692)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Venue:ISBI 2024](https://img.shields.io/badge/Venue-ISBI%202024-007CFF)]((https://biomedicalimaging.org/2024/))
 
@@ -17,7 +17,7 @@
   </tr>
 </table>
 
-This is the official code repository for the ISBI 2024 paper [Inference Stage Denoising for Undersampled MRI Reconstruction](https://arxiv.org/abs/).
+This is the official code repository for the ISBI 2024 paper [Inference Stage Denoising for Undersampled MRI Reconstruction](https://arxiv.org/abs/2402.08692).
 ## Abstract
 Reconstruction of magnetic resonance imaging (MRI) data has been positively affected by deep learning. A key challenge remains: to improve generalisation to distribution shifts between the training and testing data. Most approaches aim to address this via inductive design or data augmentation. However, they can be affected by misleading data, e.g. random noise, and cases where the inference stage data do not match assumptions in the modelled shifts. In this work, by employing a conditional hyperparameter network, we eliminate the need of augmentation, yet maintain robust performance under various levels of Gaussian noise.
 We demonstrate that our model withstands various input noise levels while producing high-definition reconstructions during the test stage. Moreover, we present a hyperparameter sampling strategy that accelerates the convergence of training. Our proposed method achieves the highest accuracy and image quality in all settings compared to baseline methods.
@@ -94,6 +94,7 @@ If you find this repository or the ideas presented in our paper useful, please c
   title={Inference Stage Denoising for Undersampled MRI Reconstruction},
   author={Yuyang, Xue., Chen, Qin and Sotirios A. Tsaftaris},
   journal={ISBI},
+  journal={arXiv preprint arXiv:2402.08692},
   year={2024}
 }
 ```
